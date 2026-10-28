@@ -6,6 +6,7 @@ from sqlalchemy import DateTime, ForeignKey, Numeric, String, UniqueConstraint, 
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, str_enum
+from app.models.restaurant import Restaurant
 from app.models.user import User
 
 
@@ -38,6 +39,7 @@ class Order(TimestampMixin, Base):
     # selectin: one extra query per list (no N+1), and unlike a JOIN it doesn't extend
     # the order's FOR UPDATE lock to the customer's row.
     customer: Mapped["User"] = relationship(lazy="selectin")
+    restaurant: Mapped["Restaurant"] = relationship(lazy="selectin")
     events: Mapped[list["OrderStatusEvent"]] = relationship(
         cascade="all, delete-orphan", lazy="selectin", order_by="OrderStatusEvent.id"
     )
@@ -45,6 +47,10 @@ class Order(TimestampMixin, Base):
     @property
     def customer_name(self) -> str:
         return self.customer.full_name
+
+    @property
+    def restaurant_name(self) -> str:
+        return self.restaurant.name
 
     def set_status(self, status: OrderStatus) -> None:
         """Change status and record it, so tracking can show when each step happened."""

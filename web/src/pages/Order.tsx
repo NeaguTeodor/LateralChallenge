@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, FLOW, isFinal, money, statusLabel, streamOrderStatus, type Order } from "../api";
 import { ErrorNote, StatusBadge } from "../components/Layout";
-import { useRestaurantNames } from "./Restaurants";
 
 const RECONNECT_MS = 3000;
 
@@ -10,7 +9,6 @@ export function OrderPage() {
   const id = Number(useParams().id);
   const [order, setOrder] = useState<Order | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const restaurantName = useRestaurantNames();
 
   const refresh = useCallback(() => {
     api.order(id).then(
@@ -60,7 +58,7 @@ export function OrderPage() {
         Order #{order.id} <StatusBadge status={order.status} />
       </h1>
       <p className="muted">
-        {restaurantName(order.restaurant_id)} · placed by {order.customer_name} on{" "}
+        {order.restaurant_name} · placed by {order.customer_name} on{" "}
         {new Date(order.created_at).toLocaleString()}
       </p>
 

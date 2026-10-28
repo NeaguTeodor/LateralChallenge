@@ -84,7 +84,8 @@ export function Layout() {
         </div>
       </header>
       <main className="container">
-        <Outlet />
+        {/* Keyed on the account: switching users remounts the page so it refetches its data. */}
+        <Outlet key={user?.id ?? "anonymous"} />
       </main>
     </>
   );

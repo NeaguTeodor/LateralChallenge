@@ -75,7 +75,9 @@ def place_order(
             status.HTTP_422_UNPROCESSABLE_CONTENT, "delivery_address: required (none saved yet)"
         )
 
-    restaurant = db.get(Restaurant, payload.restaurant_id)
+    # Shared lock: concurrent checkouts don't block each other, but deactivating the
+    # restaurant (exclusive lock) waits for them, and they wait for it.
+    restaurant = db.get(Restaurant, payload.restaurant_id, with_for_update={"read": True})
     if restaurant is None or not restaurant.is_active:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Restaurant not found")
 
@@ -128,7 +130,8 @@ def place_order(
     return order
 
 
-def change_status(db: Session, order: Order, new_status: OrderStatus) -> Order:
+def _transition(db: Session, order: Order, new_status: OrderStatus) -> None:
+    """Validate, record and announce a status change. The caller commits."""
     if new_status not in ALLOWED_TRANSITIONS[order.status]:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
@@ -136,9 +139,24 @@ def change_status(db: Session, order: Order, new_status: OrderStatus) -> Order:
         )
     order.set_status(new_status)
     db.execute(select(func.pg_notify(STATUS_CHANNEL, f"{order.id}:{new_status}")))
+
+
+def change_status(db: Session, order: Order, new_status: OrderStatus) -> Order:
+    _transition(db, order, new_status)
     db.commit()
     db.refresh(order)
     return order
+
+
+def cancel_open_orders(db: Session, restaurant_id: int) -> None:
+    """When a restaurant closes, cancel what it hasn't sent out yet. The caller commits.
+
+    Orders already out for delivery are left to complete.
+    """
+    cancellable = [s for s, nxt in ALLOWED_TRANSITIONS.items() if OrderStatus.CANCELLED in nxt]
+    stmt = select(Order).where(Order.restaurant_id == restaurant_id, Order.status.in_(cancellable))
+    for order in db.scalars(stmt.with_for_update(of=Order)):
+        _transition(db, order, OrderStatus.CANCELLED)
 
 
 async def status_stream(order_id: int) -> AsyncIterator[str]:

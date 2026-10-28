@@ -15,13 +15,16 @@ from app.schemas.restaurant import (
     RestaurantRead,
     RestaurantUpdate,
 )
+from app.services import orders as order_service
 
 router = APIRouter(prefix="/restaurants", tags=["restaurants"])
 
 
-def get_restaurant_or_404(db: SessionDep, restaurant_id: int, user: User | None) -> Restaurant:
+def get_restaurant_or_404(
+    db: SessionDep, restaurant_id: int, user: User | None, *, lock: bool = False
+) -> Restaurant:
     """Inactive restaurants exist only for admins; everyone else gets 404."""
-    restaurant = db.get(Restaurant, restaurant_id)
+    restaurant = db.get(Restaurant, restaurant_id, with_for_update=lock)
     if restaurant is None or not (restaurant.is_active or (user and user.is_admin)):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Restaurant not found")
     return restaurant
@@ -85,7 +88,10 @@ def create_restaurant(payload: RestaurantCreate, db: SessionDep, _: AdminUser) -
 def update_restaurant(
     restaurant_id: int, payload: RestaurantUpdate, db: SessionDep, admin: AdminUser
 ) -> Restaurant:
-    return apply_update(db, get_restaurant_or_404(db, restaurant_id, admin), payload)
+    restaurant = get_restaurant_or_404(db, restaurant_id, admin, lock=True)
+    if payload.is_active is False and restaurant.is_active:
+        order_service.cancel_open_orders(db, restaurant.id)  # committed with the update
+    return apply_update(db, restaurant, payload)
 
 
 @router.post(

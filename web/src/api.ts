@@ -40,6 +40,7 @@ export interface Order {
   customer_id: number;
   customer_name: string;
   restaurant_id: number;
+  restaurant_name: string;
   status: OrderStatus;
   delivery_address: string;
   total: string;
@@ -179,6 +180,7 @@ export const NEXT_STATUS: Partial<Record<OrderStatus, OrderStatus>> = {
   accepted: "out_for_delivery",
   out_for_delivery: "delivered",
 };
+export const MAX_QUANTITY = 10; // per menu item in one order, as enforced by the API
 export const CANCELLABLE: OrderStatus[] = ["pending", "accepted"];
 export const isFinal = (s: OrderStatus) => s === "delivered" || s === "cancelled";
 export const FLOW: OrderStatus[] = ["pending", "accepted", "out_for_delivery", "delivered"];

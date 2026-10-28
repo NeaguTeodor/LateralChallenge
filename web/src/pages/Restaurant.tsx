@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api, isFinal, money, statusLabel, type MenuItem, type Order, type Restaurant } from "../api";
+import { api, isFinal, MAX_QUANTITY, money, statusLabel, type MenuItem, type Order, type Restaurant } from "../api";
 import { useAuth } from "../auth";
 import { useCart } from "../cart";
 import { ErrorNote } from "../components/Layout";
@@ -24,15 +24,21 @@ export function RestaurantPage() {
       .catch(() => {});
   }, [id, user]);
 
+  const { syncWithMenu } = cart;
   useEffect(() => {
     Promise.all([api.restaurant(id), api.menu(id)]).then(
       ([r, m]) => {
         setRestaurant(r);
         setMenu(m);
+        syncWithMenu(id, m);
       },
-      (e) => setError(e.message),
+      (e) => {
+        // Restaurant gone (e.g. deactivated): nothing in a cart for it can be ordered.
+        syncWithMenu(id, []);
+        setError(e.status === 404 ? "This restaurant is no longer available." : e.message);
+      },
     );
-  }, [id]);
+  }, [id, syncWithMenu]);
 
   if (error) return <ErrorNote error={error} />;
   if (!restaurant || !menu) return <p className="muted">Loading…</p>;
@@ -65,7 +71,11 @@ export function RestaurantPage() {
                 <div className="menu-actions">
                   <span className="price">{money(item.price)}</span>
                   {item.is_available ? (
-                    <button className="btn btn-small" onClick={() => cart.add(item)}>
+                    <button
+                      className="btn btn-small"
+                      onClick={() => cart.add(item)}
+                      disabled={(cart.lines.find((l) => l.item.id === item.id)?.quantity ?? 0) >= MAX_QUANTITY}
+                    >
                       Add
                     </button>
                   ) : (
@@ -147,7 +157,12 @@ function Checkout({ restaurantId }: { restaurantId: number }) {
                 −
               </button>
               {l.quantity}
-              <button className="btn btn-ghost btn-small" onClick={() => cart.setQuantity(l.item.id, l.quantity + 1)}>
+              <button
+                className="btn btn-ghost btn-small"
+                onClick={() => cart.setQuantity(l.item.id, l.quantity + 1)}
+                disabled={l.quantity >= MAX_QUANTITY}
+                title={l.quantity >= MAX_QUANTITY ? `Max ${MAX_QUANTITY} per item` : undefined}
+              >
                 +
               </button>
             </span>

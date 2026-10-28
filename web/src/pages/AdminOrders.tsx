@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, CANCELLABLE, money, NEXT_STATUS, statusLabel, type Order, type OrderStatus } from "../api";
 import { ErrorNote, StatusBadge } from "../components/Layout";
-import { useRestaurantNames } from "./Restaurants";
 
 const FILTERS: (OrderStatus | "")[] = ["", "pending", "accepted", "out_for_delivery", "delivered", "cancelled"];
 const POLL_MS = 10000;
@@ -12,7 +11,6 @@ export function AdminOrdersPage() {
   const [orders, setOrders] = useState<Order[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
-  const restaurantName = useRestaurantNames();
 
   const refresh = useCallback(() => {
     api.orders(filter || undefined).then(setOrders, (e) => setError(e.message));
@@ -77,7 +75,7 @@ export function AdminOrdersPage() {
                       <div className="muted small">{new Date(o.created_at).toLocaleTimeString()}</div>
                     </td>
                     <td>{o.customer_name}</td>
-                    <td>{restaurantName(o.restaurant_id)}</td>
+                    <td>{o.restaurant_name}</td>
                     <td className="small">{o.items.map((i) => `${i.quantity}× ${i.name}`).join(", ")}</td>
                     <td className="small">{o.delivery_address}</td>
                     <td>{money(o.total)}</td>

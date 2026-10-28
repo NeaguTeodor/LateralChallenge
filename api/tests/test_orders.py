@@ -4,8 +4,8 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 
 from app.core.config import settings
-from app.models import MenuItem, Order, OrderStatus, Restaurant
-from tests.conftest import API
+from app.models import MenuItem, Order, OrderStatus, Restaurant, UserRole
+from tests.conftest import API, _auth_headers, _make_user
 
 
 @pytest.fixture
@@ -218,12 +218,15 @@ def _place(client, headers, restaurant, **extra):
     return client.post(f"{API}/orders", json=body | extra, headers=headers)
 
 
+def _set_status(client, headers, order, status):
+    url = f"{API}/orders/{order['id']}/status"
+    return client.patch(url, json={"status": status}, headers=headers)
+
+
 def test_address_is_saved_and_reused(client, db, order, customer_headers, admin_headers):
     assert client.get(f"{API}/auth/me", headers=customer_headers).json()["address"] == "42 Home Rd"
 
-    client.patch(
-        f"{API}/orders/{order['id']}/status", json={"status": "cancelled"}, headers=admin_headers
-    )
+    _set_status(client, admin_headers, order, "cancelled")
     restaurant = db.get(Restaurant, order["restaurant_id"])
     res = _place(client, customer_headers, restaurant)  # no address sent: the saved one is used
     assert res.status_code == 201
@@ -242,15 +245,11 @@ def test_one_active_order_per_restaurant(client, order, customer_headers, admin_
 
     # Once the first order is finished, the customer can order there again.
     for status in ("accepted", "out_for_delivery", "delivered"):
-        client.patch(
-            f"{API}/orders/{order['id']}/status", json={"status": status}, headers=admin_headers
-        )
+        _set_status(client, admin_headers, order, status)
     assert _place(client, customer_headers, restaurant).status_code == 201
 
 
-def test_order_limit_per_customer_ignores_cancelled(
-    client, order, customer_headers, db, monkeypatch
-):
+def test_order_limit_ignores_cancelled_orders(client, order, customer_headers, db, monkeypatch):
     monkeypatch.setattr(settings, "max_orders_per_customer", 1)
     other = Restaurant(name="Other", address="2 St", menu_items=[MenuItem(name="Pie", price=1)])
     db.add(other)
@@ -261,3 +260,48 @@ def test_order_limit_per_customer_ignores_cancelled(
 
     client.post(f"{API}/orders/{order['id']}/cancel", headers=customer_headers)
     assert _place(client, customer_headers, other).status_code == 201
+
+
+@pytest.mark.parametrize(
+    "items",
+    [
+        [{"quantity": 11}],  # over the per-item cap
+        [{"quantity": 10}, {"quantity": 10}],  # same item twice to get around the cap
+    ],
+)
+def test_per_item_quantity_is_capped(client, customer_headers, restaurant, items):
+    burger_id = restaurant.menu_items[0].id
+    lines = [{"menu_item_id": burger_id, **line} for line in items]
+    res = _place(client, customer_headers, restaurant, delivery_address="x", items=lines)
+    assert res.status_code == 422
+
+
+def test_deactivating_restaurant_cancels_unsent_orders(client, db, admin_headers, restaurant):
+    pending, accepted, on_the_way = (
+        _place(client, h, restaurant, delivery_address="x").json()
+        for h in (
+            _customer(client, db, "a@test.dev"),
+            _customer(client, db, "b@test.dev"),
+            _customer(client, db, "c@test.dev"),
+        )
+    )
+    _set_status(client, admin_headers, accepted, "accepted")
+    for s in ("accepted", "out_for_delivery"):
+        _set_status(client, admin_headers, on_the_way, s)
+
+    url = f"{API}/restaurants/{restaurant.id}"
+    client.patch(url, json={"is_active": False}, headers=admin_headers)
+
+    def status_of(order):
+        return client.get(f"{API}/orders/{order['id']}", headers=admin_headers).json()
+
+    assert status_of(pending)["status"] == "cancelled"
+    assert status_of(accepted)["status"] == "cancelled"
+    assert status_of(on_the_way)["status"] == "out_for_delivery"  # already left, so delivered
+    assert status_of(pending)["events"][-1]["status"] == "cancelled"  # recorded in history
+    assert status_of(on_the_way)["restaurant_name"] == "Testaurant"  # still named when inactive
+
+
+def _customer(client, db, email):
+    _make_user(db, email, UserRole.CUSTOMER)
+    return _auth_headers(client, email)

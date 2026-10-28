@@ -31,15 +31,3 @@ export function RestaurantsPage() {
     </>
   );
 }
-
-// Map of restaurant id → name, for labelling orders.
-export function useRestaurantNames() {
-  const [names, setNames] = useState<Record<number, string>>({});
-  useEffect(() => {
-    api
-      .restaurants()
-      .then((rs) => setNames(Object.fromEntries(rs.map((r) => [r.id, r.name]))))
-      .catch(() => {});
-  }, []);
-  return (id: number) => names[id] ?? `Restaurant #${id}`;
-}
