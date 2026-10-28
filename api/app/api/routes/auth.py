@@ -60,7 +60,7 @@ def read_me(user: CurrentUser) -> User:
 
 
 def _require_demo() -> None:
-    if not settings.demo_logins_enabled:
+    if not settings.demo_logins:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
 
 

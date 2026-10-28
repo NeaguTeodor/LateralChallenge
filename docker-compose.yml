@@ -20,6 +20,7 @@ services:
     build: ./api
     environment:
       ENVIRONMENT: ${ENVIRONMENT:-local}
+      DEMO_LOGINS: ${DEMO_LOGINS:-true}  # local demo account switcher; never in production
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-takeaway}:${POSTGRES_PASSWORD:-takeaway}@db:5432/${POSTGRES_DB:-takeaway}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-insecure-dev-secret-change-me-in-production}
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-60}

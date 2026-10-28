@@ -1,4 +1,6 @@
-from app.core.config import settings
+import pytest
+
+from app.core.config import Settings, settings
 from app.models import UserRole
 from tests.conftest import API, _make_user
 
@@ -45,7 +47,8 @@ def test_password_limit_is_in_bytes(client):
     assert client.post(f"{API}/auth/register", json=payload).status_code == 422
 
 
-def test_demo_switcher_lists_every_account_and_logs_in_as_any(client, db):
+def test_demo_switcher_lists_every_account_and_logs_in_as_any(client, db, monkeypatch):
+    monkeypatch.setattr(settings, "demo_logins", True)
     _make_user(db, "boss@test.dev", UserRole.ADMIN)
     _make_user(db, "first@test.dev", UserRole.CUSTOMER)
     client.post(
@@ -62,8 +65,19 @@ def test_demo_switcher_lists_every_account_and_logs_in_as_any(client, db):
         assert me.json()["email"] == account["email"]
 
 
-def test_demo_login_disabled_in_production(client, db, monkeypatch):
+def test_demo_login_is_off_by_default(client, db):
     admin = _make_user(db, "boss@test.dev", UserRole.ADMIN)
-    monkeypatch.setattr(settings, "environment", "production")
     assert client.get(f"{API}/auth/demo-accounts").status_code == 404
     assert client.post(f"{API}/auth/demo-login/{admin.id}").status_code == 404
+
+
+def test_production_refuses_demo_logins():
+    with pytest.raises(ValueError, match="DEMO_LOGINS"):
+        Settings(environment="production", demo_logins=True, **SECURE)
+
+
+SECURE = {
+    "jwt_secret_key": "s3cret",
+    "first_admin_password": "s3cret",
+    "demo_customer_password": "s3cret",
+}

@@ -30,16 +30,19 @@ class Settings(BaseSettings):
     demo_customer_email: str = "customer@takeaway.dev"
     demo_customer_password: str = INSECURE_DEFAULTS["demo_customer_password"]
 
-    @property
-    def demo_logins_enabled(self) -> bool:
-        """One-click login as the seeded accounts, for local demos only."""
-        return self.environment == "local"
+    # Passwordless login as any account, for the local demo's account switcher. Off unless
+    # explicitly enabled (docker-compose does), and refused in production.
+    demo_logins: bool = False
 
     @model_validator(mode="after")
     def _no_insecure_defaults_in_production(self) -> "Settings":
         insecure = [k for k, v in INSECURE_DEFAULTS.items() if getattr(self, k) == v]
+        if not self.seed_demo_data:  # the demo customer isn't created then
+            insecure = [k for k in insecure if k != "demo_customer_password"]
         if self.environment == "production" and insecure:
             raise ValueError(f"Set secure values for {insecure} in production")
+        if self.environment == "production" and self.demo_logins:
+            raise ValueError("DEMO_LOGINS must be off in production")
         return self
 
 

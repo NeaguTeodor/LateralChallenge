@@ -38,8 +38,8 @@ def get_menu_item_or_404(db: SessionDep, restaurant_id: int, item_id: int) -> Me
 
 
 def apply_update[T](db: SessionDep, obj: T, payload: BaseModel) -> T:
-    """PATCH semantics: only fields the client actually sent are changed."""
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    """PATCH semantics: only fields sent with a value are changed (null means "leave as is")."""
+    for field, value in payload.model_dump(exclude_none=True).items():
         setattr(obj, field, value)
     db.commit()
     db.refresh(obj)

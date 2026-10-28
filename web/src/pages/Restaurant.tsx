@@ -35,7 +35,7 @@ export function RestaurantPage() {
       },
       (e) => {
         // Restaurant gone (e.g. deactivated): nothing in a cart for it can be ordered.
-        syncWithMenu(id, []);
+        if (e.status === 404) syncWithMenu(id, []);
         setError(e.status === 404 ? "This restaurant is no longer available." : e.message);
       },
     );

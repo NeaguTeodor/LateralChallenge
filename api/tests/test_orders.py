@@ -2,8 +2,10 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
+from sqlalchemy import text
 
 from app.core.config import settings
+from app.core.database import engine
 from app.models import MenuItem, Order, OrderStatus, Restaurant, UserRole
 from tests.conftest import API, _auth_headers, _make_user
 
@@ -201,6 +203,13 @@ def test_status_stream_pushes_changes(client, order, customer_headers):
     with ThreadPoolExecutor(max_workers=1) as pool:
         events = pool.submit(read_stream)
         time.sleep(0.5)  # let the stream start listening
+        # An open stream must not pin the request's pooled DB session in a transaction.
+        idle = (
+            "SELECT count(*) FROM pg_stat_activity"
+            " WHERE datname = current_database() AND state = 'idle in transaction'"
+        )
+        with engine.connect() as conn:
+            assert conn.scalar(text(idle)) == 0
         client.post(f"{API}/orders/{order['id']}/cancel", headers=customer_headers)
         assert events.result(timeout=10) == ["pending", "cancelled"]
 
@@ -310,3 +319,15 @@ def _customer(client, db, email):
 def test_staff_cannot_place_orders(client, admin_headers, restaurant):
     res = _place(client, admin_headers, restaurant, delivery_address="x")
     assert res.status_code == 403
+
+
+def test_simultaneous_retries_get_the_same_order(client, customer_headers, restaurant):
+    headers = {**customer_headers, "Idempotency-Key": "double-click"}
+
+    def submit(_):
+        return _place(client, headers, restaurant, delivery_address="x")
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        responses = list(pool.map(submit, range(2)))
+    assert [r.status_code for r in responses] == [201, 201]
+    assert responses[0].json()["id"] == responses[1].json()["id"]

@@ -86,3 +86,14 @@ def test_invalid_price_rejected(client, admin_headers, restaurant):
         headers=admin_headers,
     )
     assert res.status_code == 422
+
+
+def test_patch_with_null_leaves_field_unchanged(client, admin_headers, restaurant):
+    item = restaurant.menu_items[0]
+    res = client.patch(
+        f"{API}/restaurants/{restaurant.id}/menu/{item.id}",
+        json={"name": None, "price": None},
+        headers=admin_headers,
+    )
+    assert res.status_code == 200
+    assert (res.json()["name"], res.json()["price"]) == ("Burger", "9.50")

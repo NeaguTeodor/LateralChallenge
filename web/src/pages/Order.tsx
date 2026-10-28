@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { api, FLOW, isFinal, money, statusLabel, streamOrderStatus, type Order } from "../api";
+import { api, ApiError, FLOW, isFinal, money, statusLabel, streamOrderStatus, type Order } from "../api";
 import { ErrorNote, StatusBadge } from "../components/Layout";
 
 const RECONNECT_MS = 3000;
@@ -27,10 +27,18 @@ export function OrderPage() {
     refresh();
     if (!live) return;
     const abort = new AbortController();
+    let stop = false;
     const connect = () =>
       streamOrderStatus(id, refresh, abort.signal)
-        .catch(() => {})
-        .finally(() => !abort.signal.aborted && setTimeout(connect, RECONNECT_MS));
+        .catch((e) => {
+          // Not allowed / not found won't fix itself: stop, and let a normal fetch report it
+          // (a 401 there also signs the user out).
+          if (e instanceof ApiError && [401, 404].includes(e.status)) {
+            stop = true;
+            refresh();
+          }
+        })
+        .finally(() => !abort.signal.aborted && !stop && setTimeout(connect, RECONNECT_MS));
     connect();
     return () => abort.abort();
   }, [id, refresh, live]);

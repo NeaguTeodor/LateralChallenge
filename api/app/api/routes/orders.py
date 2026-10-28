@@ -58,6 +58,9 @@ def get_order(order_id: int, db: SessionDep, user: CurrentUser) -> Order:
 def stream_order_status(order_id: int, db: SessionDep, user: CurrentUser) -> StreamingResponse:
     """Live tracking via Server-Sent Events (`data: <status>` per change)."""
     get_order_for_user(db, user, order_id)  # authorization only
+    # Release the pooled connection now: the request's session would otherwise stay open
+    # (idle in transaction) for as long as the stream does. The stream uses its own connection.
+    db.close()
     return StreamingResponse(
         order_service.status_stream(order_id),
         media_type="text/event-stream",

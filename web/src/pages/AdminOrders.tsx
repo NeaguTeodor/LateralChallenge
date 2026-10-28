@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, CANCELLABLE, money, NEXT_STATUS, statusLabel, type Order, type OrderStatus } from "../api";
 import { ErrorNote, StatusBadge } from "../components/Layout";
@@ -12,8 +12,14 @@ export function AdminOrdersPage() {
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
 
+  // Ignore responses for a filter that's no longer selected (a slow request finishing late).
+  const currentFilter = useRef(filter);
+  currentFilter.current = filter;
   const refresh = useCallback(() => {
-    api.orders(filter || undefined).then(setOrders, (e) => setError(e.message));
+    api.orders(filter || undefined).then(
+      (o) => currentFilter.current === filter && setOrders(o),
+      (e) => setError(e.message),
+    );
   }, [filter]);
 
   // Poll so new customer orders appear without a reload.

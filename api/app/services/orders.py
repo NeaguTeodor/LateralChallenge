@@ -3,7 +3,6 @@ from collections.abc import AsyncIterator
 import psycopg
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -63,11 +62,11 @@ def place_order(
     db: Session, customer: User, payload: OrderCreate, idempotency_key: str | None = None
 ) -> Order:
     """Idempotent when a key is given: a retry returns the order the first attempt created."""
+    # Lock the customer's row: simultaneous checkouts (including retries with the same key)
+    # run one after another, so neither the key lookup nor the limits below can be raced.
+    db.execute(select(User.id).where(User.id == customer.id).with_for_update())
     if idempotency_key and (existing := _order_by_key(db, customer, idempotency_key)):
         return existing
-
-    # Lock the customer's row so two simultaneous checkouts can't both pass the limits below.
-    db.execute(select(User.id).where(User.id == customer.id).with_for_update())
     _check_order_limits(db, customer, payload.restaurant_id)
 
     if not (address := payload.delivery_address or customer.address):
@@ -85,9 +84,9 @@ def place_order(
     menu_items = {
         item.id: item
         for item in db.scalars(
-            select(MenuItem).where(
-                MenuItem.id.in_(requested_ids), MenuItem.restaurant_id == restaurant.id
-            )
+            select(MenuItem)
+            .where(MenuItem.id.in_(requested_ids), MenuItem.restaurant_id == restaurant.id)
+            .with_for_update(read=True)  # can't be deleted while this checkout runs
         )
     }
 
@@ -121,11 +120,7 @@ def place_order(
     order.set_status(OrderStatus.PENDING)
     customer.address = address  # remembered for the next checkout
     db.add(order)
-    try:
-        db.commit()
-    except IntegrityError:  # a concurrent retry with the same key won the race
-        db.rollback()
-        return _order_by_key(db, customer, idempotency_key)
+    db.commit()
     db.refresh(order)
     return order
 

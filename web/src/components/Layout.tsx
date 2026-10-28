@@ -45,7 +45,9 @@ export function Layout() {
                 value=""
                 onChange={(e) => {
                   const account = demoAccounts.find((a) => a.id === Number(e.target.value))!;
-                  switchTo(account.id).then(() => navigate(account.role === "admin" ? "/admin/orders" : "/"));
+                  switchTo(account.id)
+                    .then(() => navigate(account.role === "admin" ? "/admin/orders" : "/"))
+                    .catch(() => {}); // e.g. the account was removed; the header stays as it was
                 }}
               >
                 <option value="" disabled>
