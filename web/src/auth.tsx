@@ -1,13 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
-import { api, setUnauthorizedHandler, tokenStore, type Role, type User } from "./api";
+import { api, setUnauthorizedHandler, tokenStore, type User } from "./api";
 
 interface AuthState {
   user: User | null;
   loading: boolean;
   demoAccounts: User[];
   login: (email: string, password: string) => Promise<void>;
-  switchTo: (role: Role) => Promise<void>;
+  switchTo: (userId: number) => Promise<void>;
   logout: () => void;
 }
 
@@ -26,18 +26,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, []);
 
-  const startSession = useCallback(async (token: string) => {
-    tokenStore.set(token);
-    localStorage.removeItem(LOGGED_OUT_KEY);
-    setUser(await api.me());
+  // Refreshed on every sign-in, so newly registered accounts show up in the switcher.
+  const loadDemoAccounts = useCallback(async () => {
+    const accounts = await api.demoAccounts().catch(() => []);
+    setDemoAccounts(accounts);
+    return accounts;
   }, []);
+
+  const startSession = useCallback(
+    async (token: string) => {
+      tokenStore.set(token);
+      localStorage.removeItem(LOGGED_OUT_KEY);
+      setUser(await api.me());
+      loadDemoAccounts();
+    },
+    [loadDemoAccounts],
+  );
 
   const login = useCallback(
     async (email: string, password: string) => startSession((await api.login(email, password)).access_token),
     [startSession],
   );
   const switchTo = useCallback(
-    async (role: Role) => startSession((await api.demoLogin(role)).access_token),
+    async (userId: number) => startSession((await api.demoLogin(userId)).access_token),
     [startSession],
   );
   const logout = useCallback(() => {
@@ -49,15 +60,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     setUnauthorizedHandler(clearSession);
     (async () => {
-      const accounts = await api.demoAccounts().catch(() => []);
-      setDemoAccounts(accounts);
+      const accounts = await loadDemoAccounts();
       const me = tokenStore.get() ? await api.me().catch(() => null) : null;
+      const firstCustomer = accounts.find((a) => a.role === "customer");
       if (me) setUser(me);
-      else if (accounts.some((a) => a.role === "customer") && !localStorage.getItem(LOGGED_OUT_KEY))
-        await switchTo("customer");
+      else if (firstCustomer && !localStorage.getItem(LOGGED_OUT_KEY)) await switchTo(firstCustomer.id);
       else clearSession();
     })().finally(() => setLoading(false));
-  }, [clearSession, switchTo]);
+  }, [clearSession, loadDemoAccounts, switchTo]);
 
   return (
     <AuthContext.Provider value={{ user, loading, demoAccounts, login, switchTo, logout }}>

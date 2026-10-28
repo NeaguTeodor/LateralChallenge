@@ -1,7 +1,7 @@
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth";
 import { useCart } from "../cart";
-import { roleLabel, statusLabel, type OrderStatus, type Role } from "../api";
+import { roleLabel, statusLabel, type OrderStatus } from "../api";
 
 export function Layout() {
   const { user, logout, demoAccounts, switchTo } = useAuth();
@@ -44,16 +44,16 @@ export function Layout() {
                 aria-label="Switch demo account"
                 value=""
                 onChange={(e) => {
-                  const role = e.target.value as Role;
-                  switchTo(role).then(() => navigate(role === "admin" ? "/admin/orders" : "/"));
+                  const account = demoAccounts.find((a) => a.id === Number(e.target.value))!;
+                  switchTo(account.id).then(() => navigate(account.role === "admin" ? "/admin/orders" : "/"));
                 }}
               >
                 <option value="" disabled>
                   Switch to…
                 </option>
                 {demoAccounts.map((a) => (
-                  <option key={a.id} value={a.role} disabled={a.id === user?.id} title={a.email}>
-                    {roleLabel(a.role)}
+                  <option key={a.id} value={a.id} disabled={a.id === user?.id} title={a.email}>
+                    {a.full_name} ({roleLabel(a.role)})
                   </option>
                 ))}
               </select>

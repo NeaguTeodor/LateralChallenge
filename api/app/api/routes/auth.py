@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -13,7 +14,7 @@ from app.core.security import (
     hash_password,
     verify_password,
 )
-from app.models import User, UserRole
+from app.models import User
 from app.schemas.user import Token, UserCreate, UserRead
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -55,24 +56,24 @@ def read_me(user: CurrentUser) -> User:
     return user
 
 
-# --- Local demo helpers: switch between seeded accounts without typing passwords ---
+# --- Local demo helpers: switch between accounts without typing passwords ---
 
 
-def _demo_users(db: SessionDep) -> dict[UserRole, User]:
+def _require_demo() -> None:
     if not settings.demo_logins_enabled:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
-    emails = [settings.first_admin_email.lower(), settings.demo_customer_email.lower()]
-    return {u.role: u for u in db.scalars(select(User).where(User.email.in_(emails)))}
 
 
 @router.get("/demo-accounts", response_model=list[UserRead])
-def demo_accounts(db: SessionDep) -> list[User]:
-    """Seeded accounts available for one-click login (404 outside the local environment)."""
-    return list(_demo_users(db).values())
+def demo_accounts(db: SessionDep) -> Sequence[User]:
+    """Every account, customers first, for the demo switcher (404 outside local)."""
+    _require_demo()
+    return db.scalars(select(User).order_by(User.role, User.id).limit(100)).all()
 
 
-@router.post("/demo-login/{role}", response_model=Token)
-def demo_login(role: UserRole, db: SessionDep) -> Token:
-    if (user := _demo_users(db).get(role)) is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "No demo account for this role")
-    return Token(access_token=create_access_token(user.id))
+@router.post("/demo-login/{user_id}", response_model=Token)
+def demo_login(user_id: int, db: SessionDep) -> Token:
+    _require_demo()
+    if db.get(User, user_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+    return Token(access_token=create_access_token(user_id))

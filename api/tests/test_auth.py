@@ -45,21 +45,25 @@ def test_password_limit_is_in_bytes(client):
     assert client.post(f"{API}/auth/register", json=payload).status_code == 422
 
 
-def test_demo_login_switches_between_seeded_accounts(client, db):
-    _make_user(db, settings.first_admin_email, UserRole.ADMIN)
-    _make_user(db, settings.demo_customer_email, UserRole.CUSTOMER)
-    assert {u["role"] for u in client.get(f"{API}/auth/demo-accounts").json()} == {
-        "admin",
-        "customer",
-    }
-    for role in ("admin", "customer"):
-        token = client.post(f"{API}/auth/demo-login/{role}").json()["access_token"]
+def test_demo_switcher_lists_every_account_and_logs_in_as_any(client, db):
+    _make_user(db, "boss@test.dev", UserRole.ADMIN)
+    _make_user(db, "first@test.dev", UserRole.CUSTOMER)
+    client.post(
+        f"{API}/auth/register",
+        json={"email": "new@test.dev", "full_name": "New", "password": "password123"},
+    )
+    accounts = client.get(f"{API}/auth/demo-accounts").json()
+    # Customers first (including the one who just signed up), then admins.
+    assert [a["email"] for a in accounts] == ["first@test.dev", "new@test.dev", "boss@test.dev"]
+
+    for account in accounts:
+        token = client.post(f"{API}/auth/demo-login/{account['id']}").json()["access_token"]
         me = client.get(f"{API}/auth/me", headers={"Authorization": f"Bearer {token}"})
-        assert me.json()["role"] == role
+        assert me.json()["email"] == account["email"]
 
 
 def test_demo_login_disabled_in_production(client, db, monkeypatch):
-    _make_user(db, settings.first_admin_email, UserRole.ADMIN)
+    admin = _make_user(db, "boss@test.dev", UserRole.ADMIN)
     monkeypatch.setattr(settings, "environment", "production")
     assert client.get(f"{API}/auth/demo-accounts").status_code == 404
-    assert client.post(f"{API}/auth/demo-login/admin").status_code == 404
+    assert client.post(f"{API}/auth/demo-login/{admin.id}").status_code == 404

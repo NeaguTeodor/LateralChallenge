@@ -117,9 +117,9 @@ export const api = {
   register: (data: { email: string; full_name: string; password: string }) =>
     request<User>("/auth/register", json("POST", data)),
   me: () => request<User>("/auth/me"),
-  // Local demo only (404 in production): seeded accounts and passwordless login as one of them.
+  // Local demo only (404 in production): every account, and passwordless login as any of them.
   demoAccounts: () => request<User[]>("/auth/demo-accounts"),
-  demoLogin: (role: Role) => request<{ access_token: string }>(`/auth/demo-login/${role}`, { method: "POST" }),
+  demoLogin: (userId: number) => request<{ access_token: string }>(`/auth/demo-login/${userId}`, { method: "POST" }),
 
   restaurants: () => request<Restaurant[]>("/restaurants"),
   restaurant: (id: number) => request<Restaurant>(`/restaurants/${id}`),
