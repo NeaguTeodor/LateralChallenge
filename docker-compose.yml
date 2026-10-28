@@ -1,0 +1,52 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-takeaway}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-takeaway}
+      POSTGRES_DB: ${POSTGRES_DB:-takeaway}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    ports:
+      # Localhost only: for local dev and tests, never exposed on the network.
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: ./api
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-local}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-takeaway}:${POSTGRES_PASSWORD:-takeaway}@db:5432/${POSTGRES_DB:-takeaway}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-insecure-dev-secret-change-me-in-production}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-60}
+      FIRST_ADMIN_EMAIL: ${FIRST_ADMIN_EMAIL:-admin@takeaway.dev}
+      FIRST_ADMIN_PASSWORD: ${FIRST_ADMIN_PASSWORD:-admin1234}
+      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}
+    depends_on:
+      db:
+        condition: service_healthy
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  nginx:
+    # Serves the built web UI and proxies /api to the backend.
+    build: ./web
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "${HTTP_PORT:-8080}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  db-data:
