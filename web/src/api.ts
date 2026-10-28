@@ -38,6 +38,7 @@ export interface OrderItem {
 export interface Order {
   id: number;
   customer_id: number;
+  customer_name: string;
   restaurant_id: number;
   status: OrderStatus;
   delivery_address: string;

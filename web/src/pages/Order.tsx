@@ -60,7 +60,8 @@ export function OrderPage() {
         Order #{order.id} <StatusBadge status={order.status} />
       </h1>
       <p className="muted">
-        {restaurantName(order.restaurant_id)} · placed {new Date(order.created_at).toLocaleString()}
+        {restaurantName(order.restaurant_id)} · placed by {order.customer_name} on{" "}
+        {new Date(order.created_at).toLocaleString()}
       </p>
 
       {order.status === "cancelled" ? (

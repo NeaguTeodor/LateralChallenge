@@ -29,6 +29,7 @@ def order(client, customer_headers, restaurant):
 
 def test_place_order_computes_total_and_snapshots_items(order):
     assert order["status"] == "pending"
+    assert order["customer_name"] == "customer@test.dev"  # conftest uses the email as name
     assert order["total"] == "22.25"
     assert [(i["name"], i["unit_price"], i["quantity"]) for i in order["items"]] == [
         ("Burger", "9.50", 2),

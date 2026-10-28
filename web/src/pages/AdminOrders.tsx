@@ -58,6 +58,7 @@ export function AdminOrdersPage() {
             <thead>
               <tr>
                 <th>#</th>
+                <th>Customer</th>
                 <th>Restaurant</th>
                 <th>Items</th>
                 <th>Address</th>
@@ -75,6 +76,7 @@ export function AdminOrdersPage() {
                       <Link to={`/orders/${o.id}`}>#{o.id}</Link>
                       <div className="muted small">{new Date(o.created_at).toLocaleTimeString()}</div>
                     </td>
+                    <td>{o.customer_name}</td>
                     <td>{restaurantName(o.restaurant_id)}</td>
                     <td className="small">{o.items.map((i) => `${i.quantity}× ${i.name}`).join(", ")}</td>
                     <td className="small">{o.delivery_address}</td>

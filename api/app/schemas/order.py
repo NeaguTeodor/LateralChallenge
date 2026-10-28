@@ -39,6 +39,7 @@ class OrderRead(BaseModel):
 
     id: int
     customer_id: int
+    customer_name: str
     restaurant_id: int
     status: OrderStatus
     delivery_address: str
