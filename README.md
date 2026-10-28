@@ -9,20 +9,42 @@ track their status; staff (admins) manage menus and move orders through their li
 | `web/`    | React + TypeScript UI ([details](web/README.md))                  |
 | `nginx/`  | Reverse proxy config                                              |
 
-## Quick start
+| Order with a live cart | Live order tracking | Staff order board |
+|---|---|---|
+| ![Menu and cart](docs/menu.png) | ![Live tracking](docs/tracking.png) | ![Admin orders](docs/admin-orders.png) |
+
+## Review in 2 minutes
 
 ```bash
-cp .env.example .env    # optional — defaults work out of the box
-docker compose up --build
+docker compose up --build        # no .env needed; migrations + demo data run on start
 ```
 
-- Web UI: http://localhost:8080
-- API docs: http://localhost:8080/api/docs
-- Seeded admin: `admin@takeaway.dev` / `admin1234`
-- Two demo restaurants with menus are seeded on first start.
+1. Open **http://localhost:8080**, sign up as a customer, add a few items and place an order.
+2. In a private window, log in as staff (`admin@takeaway.dev` / `admin1234`) → **Manage orders**.
+3. Advance the order. The customer's tracking page updates **instantly** (Server-Sent Events),
+   with a timestamp per step.
+4. API docs with "Authorize": **http://localhost:8080/api/docs**.
 
-`nginx` (port 8080, serves the built UI at `/`) → `api` (uvicorn, 2 workers) → `db` (Postgres 17). On start the API
-container runs migrations and the idempotent seed script.
+Tests (needs the compose `db` running; uses a separate `takeaway_test` database):
+
+```bash
+cd api && uv sync && uv run pytest
+```
+
+## Architecture
+
+```mermaid
+flowchart LR
+    B[Browser] -->|":8080"| N[nginx]
+    N -->|"/"| W[React static build]
+    N -->|"/api  proxy, rate-limit on /auth"| A["FastAPI (uvicorn, 2 workers)"]
+    A -->|SQLAlchemy| D[(Postgres 17)]
+    A -. "NOTIFY order_status on status change" .-> D
+    D -. "LISTEN → SSE stream to the tracking page" .-> A
+```
+
+On start the API container runs Alembic migrations and an idempotent seed (admin user +
+two demo restaurants), then reports healthy; nginx waits for that.
 
 ## API overview
 
@@ -42,9 +64,10 @@ All routes are under `/api/v1`. Auth is JWT bearer; get a token from `POST /auth
 | POST   | `/restaurants/{id}/menu`               | admin    | Add menu item                   |
 | PATCH  | `/restaurants/{id}/menu/{item_id}`     | admin    | Update menu item                |
 | DELETE | `/restaurants/{id}/menu/{item_id}`     | admin    | Remove menu item                |
-| POST   | `/orders`                              | user     | Place an order                  |
+| POST   | `/orders`                              | user     | Place an order (`Idempotency-Key` optional) |
 | GET    | `/orders?status=`                      | user     | Own orders (admins: all)        |
-| GET    | `/orders/{id}`                         | user     | Track an order                  |
+| GET    | `/orders/{id}`                         | user     | Order with its status history   |
+| GET    | `/orders/{id}/stream`                  | user     | Live status (Server-Sent Events)|
 | POST   | `/orders/{id}/cancel`                  | user     | Cancel own order while pending  |
 | PATCH  | `/orders/{id}/status`                  | admin    | Advance order status            |
 
@@ -57,7 +80,9 @@ pending ──► accepted ──► out_for_delivery ──► delivered
 ```
 
 Invalid transitions return `409 Conflict`. Status updates lock the order row
-(`SELECT … FOR UPDATE`) so concurrent updates can't skip a step.
+(`SELECT … FOR UPDATE`) so concurrent updates can't skip a step. Every change is appended to
+`order_status_events` (audit trail + per-step timestamps) and announced with Postgres
+`NOTIFY`, which the `/stream` endpoint relays to the customer as Server-Sent Events.
 
 ## Design notes
 
@@ -74,18 +99,22 @@ Invalid transitions return `409 Conflict`. Status updates lock the order row
   behave exactly as in production, and migrations are exercised on every run.
 - **Public endpoints accept an optional token**: anonymous users only see active restaurants,
   admins see inactive ones too (so they can reactivate them).
+- **Live tracking uses SSE + Postgres `LISTEN/NOTIFY`** rather than WebSockets or Redis:
+  updates are one-way (server → customer), SSE is plain HTTP through nginx, and NOTIFY is
+  transactional (sent only on commit) and reaches every uvicorn worker with no extra service.
+- **Idempotent order placement**: an optional `Idempotency-Key` header (unique per customer)
+  makes retries and double clicks return the original order; the web UI sends one per checkout.
 - **Hardening kept deliberately small**: login/register are rate-limited in nginx, Postgres is
   bound to localhost, the health check hits the DB, and `ENVIRONMENT=production` refuses to
   start with the default JWT secret or admin password.
 
 ## Trade-offs & what I'd do next
 
-- **Live tracking** polls every 5 s. Next step: Server-Sent Events fed by Postgres
-  `LISTEN/NOTIFY` (works across uvicorn workers without adding Redis).
-- **Idempotency**: a double-submitted order creates two orders. An `Idempotency-Key` header
-  stored on the order would fix it; it matters most once payments exist.
-- **Status history**: only the current status is stored. An `order_status_events` table would
-  give timestamps per step and an audit trail.
+- **One DB connection per open stream** (each LISTENs itself). Fine here; at scale, one
+  listener per worker would fan notifications out to an in-memory set of subscribers.
+- **Idempotency keys don't check the body**: reusing a key with a different cart returns the
+  first order. Production would store a request hash and reject mismatches with 422.
+- **The staff order board polls** every 10 s; it could subscribe to the same stream.
 - **Migrations run on container start**, fine for one instance; with several replicas they'd
   move to a one-off deploy job.
 - **Staff are global admins**; a real platform would scope staff to their restaurants.
@@ -93,4 +122,4 @@ Invalid transitions return `409 Conflict`. Status updates lock the order row
   the token in `localStorage`; an httpOnly cookie would be safer against XSS.
 - **Services raise `HTTPException`** directly; with more business logic I'd use domain
   exceptions mapped to HTTP in one place.
-- No CI pipeline or structured logging yet (uvicorn access logs only).
+- No CI pipeline or structured logging yet (uvicorn access logs only); reviewers run it locally.
