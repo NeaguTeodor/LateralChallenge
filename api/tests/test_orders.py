@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
+from app.core.config import settings
 from app.models import MenuItem, Order, OrderStatus, Restaurant
 from tests.conftest import API
 
@@ -206,3 +207,56 @@ def test_status_stream_pushes_changes(client, order, customer_headers):
 def test_cannot_stream_someone_elses_order(client, order, other_customer_headers):
     res = client.get(f"{API}/orders/{order['id']}/stream", headers=other_customer_headers)
     assert res.status_code == 404
+
+
+def _place(client, headers, restaurant, **extra):
+    body = {
+        "restaurant_id": restaurant.id,
+        "items": [{"menu_item_id": restaurant.menu_items[0].id, "quantity": 1}],
+    }
+    return client.post(f"{API}/orders", json=body | extra, headers=headers)
+
+
+def test_address_is_saved_and_reused(client, db, order, customer_headers, admin_headers):
+    assert client.get(f"{API}/auth/me", headers=customer_headers).json()["address"] == "42 Home Rd"
+
+    client.patch(
+        f"{API}/orders/{order['id']}/status", json={"status": "cancelled"}, headers=admin_headers
+    )
+    restaurant = db.get(Restaurant, order["restaurant_id"])
+    res = _place(client, customer_headers, restaurant)  # no address sent: the saved one is used
+    assert res.status_code == 201
+    assert res.json()["delivery_address"] == "42 Home Rd"
+
+
+def test_first_order_needs_an_address(client, customer_headers, restaurant):
+    assert _place(client, customer_headers, restaurant).status_code == 422
+
+
+def test_one_active_order_per_restaurant(client, order, customer_headers, admin_headers, db):
+    restaurant = db.get(Restaurant, order["restaurant_id"])
+    res = _place(client, customer_headers, restaurant)
+    assert res.status_code == 409
+    assert f"#{order['id']}" in res.json()["detail"]
+
+    # Once the first order is finished, the customer can order there again.
+    for status in ("accepted", "out_for_delivery", "delivered"):
+        client.patch(
+            f"{API}/orders/{order['id']}/status", json={"status": status}, headers=admin_headers
+        )
+    assert _place(client, customer_headers, restaurant).status_code == 201
+
+
+def test_order_limit_per_customer_ignores_cancelled(
+    client, order, customer_headers, db, monkeypatch
+):
+    monkeypatch.setattr(settings, "max_orders_per_customer", 1)
+    other = Restaurant(name="Other", address="2 St", menu_items=[MenuItem(name="Pie", price=1)])
+    db.add(other)
+    db.commit()
+    res = _place(client, customer_headers, other)
+    assert res.status_code == 409
+    assert "limit" in res.json()["detail"]
+
+    client.post(f"{API}/orders/{order['id']}/cancel", headers=customer_headers)
+    assert _place(client, customer_headers, other).status_code == 201

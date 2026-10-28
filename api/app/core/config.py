@@ -25,6 +25,7 @@ class Settings(BaseSettings):
 
     first_admin_email: str = "admin@takeaway.dev"
     first_admin_password: str = INSECURE_DEFAULTS["first_admin_password"]
+    max_orders_per_customer: int = 10  # cancelled orders don't count
     seed_demo_data: bool = True  # demo restaurants + a demo customer
     demo_customer_email: str = "customer@takeaway.dev"
     demo_customer_password: str = INSECURE_DEFAULTS["demo_customer_password"]

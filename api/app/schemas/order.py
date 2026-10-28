@@ -14,7 +14,7 @@ class OrderItemCreate(BaseModel):
 
 class OrderCreate(BaseModel):
     restaurant_id: int
-    delivery_address: ShortStr
+    delivery_address: ShortStr | None = None  # defaults to the customer's saved address
     items: list[OrderItemCreate] = Field(min_length=1, max_length=50)
 
 

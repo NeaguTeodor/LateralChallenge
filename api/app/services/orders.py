@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.database import PG_DSN
 from app.models import MenuItem, Order, OrderItem, OrderStatus, Restaurant, User
 from app.schemas.order import OrderCreate
@@ -31,12 +32,48 @@ def _order_by_key(db: Session, customer: User, key: str) -> Order | None:
     )
 
 
+def _check_order_limits(db: Session, customer: User, restaurant_id: int) -> None:
+    """One active order per restaurant, and a cap on orders per customer."""
+    active = db.scalar(
+        select(Order.id).where(
+            Order.customer_id == customer.id,
+            Order.restaurant_id == restaurant_id,
+            Order.status.not_in(FINAL_STATUSES),
+        )
+    )
+    if active:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"You already have an active order (#{active}) from this restaurant. "
+            "Wait until it's delivered, or cancel it while it's still pending.",
+        )
+    placed = db.scalar(
+        select(func.count())
+        .select_from(Order)
+        .where(Order.customer_id == customer.id, Order.status != OrderStatus.CANCELLED)
+    )
+    if placed >= settings.max_orders_per_customer:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Order limit reached: {settings.max_orders_per_customer} orders per customer.",
+        )
+
+
 def place_order(
     db: Session, customer: User, payload: OrderCreate, idempotency_key: str | None = None
 ) -> Order:
     """Idempotent when a key is given: a retry returns the order the first attempt created."""
     if idempotency_key and (existing := _order_by_key(db, customer, idempotency_key)):
         return existing
+
+    # Lock the customer's row so two simultaneous checkouts can't both pass the limits below.
+    db.execute(select(User.id).where(User.id == customer.id).with_for_update())
+    _check_order_limits(db, customer, payload.restaurant_id)
+
+    if not (address := payload.delivery_address or customer.address):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "delivery_address: required (none saved yet)"
+        )
 
     restaurant = db.get(Restaurant, payload.restaurant_id)
     if restaurant is None or not restaurant.is_active:
@@ -74,12 +111,13 @@ def place_order(
     order = Order(
         customer_id=customer.id,
         restaurant_id=restaurant.id,
-        delivery_address=payload.delivery_address,
+        delivery_address=address,
         items=items,
         total=sum(item.unit_price * item.quantity for item in items),
         idempotency_key=idempotency_key,
     )
     order.set_status(OrderStatus.PENDING)
+    customer.address = address  # remembered for the next checkout
     db.add(order)
     try:
         db.commit()

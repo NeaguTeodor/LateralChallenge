@@ -18,6 +18,8 @@ class User(TimestampMixin, Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     full_name: Mapped[str] = mapped_column(String(255))
     hashed_password: Mapped[str] = mapped_column(String(255))
+    # Last delivery address used; pre-fills the next checkout.
+    address: Mapped[str | None] = mapped_column(String(255))
     role: Mapped[UserRole] = mapped_column(
         str_enum(UserRole, "user_role"), default=UserRole.CUSTOMER
     )

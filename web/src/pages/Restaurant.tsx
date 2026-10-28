@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api, money, type MenuItem, type Restaurant } from "../api";
+import { api, isFinal, money, statusLabel, type MenuItem, type Order, type Restaurant } from "../api";
 import { useAuth } from "../auth";
 import { useCart } from "../cart";
 import { ErrorNote } from "../components/Layout";
@@ -10,7 +10,19 @@ export function RestaurantPage() {
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [menu, setMenu] = useState<MenuItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [activeOrder, setActiveOrder] = useState<Order | null>(null);
   const cart = useCart();
+  const { user } = useAuth();
+
+  // Only one active order per restaurant: surface it before the customer builds a cart.
+  // (Checkout below is keyed on the user so it remounts with their saved address.)
+  useEffect(() => {
+    if (!user) return setActiveOrder(null);
+    api
+      .orders()
+      .then((orders) => setActiveOrder(orders.find((o) => o.restaurant_id === id && !isFinal(o.status)) ?? null))
+      .catch(() => {});
+  }, [id, user]);
 
   useEffect(() => {
     Promise.all([api.restaurant(id), api.menu(id)]).then(
@@ -72,8 +84,16 @@ export function RestaurantPage() {
 
         <aside className="card cart">
           <h2>Your order</h2>
-          {cart.restaurantId === id && cart.count > 0 ? (
-            <Checkout restaurantId={id} />
+          {activeOrder ? (
+            <p className="note small">
+              You already have an active order here:{" "}
+              <Link to={`/orders/${activeOrder.id}`}>
+                #{activeOrder.id} ({statusLabel(activeOrder.status)})
+              </Link>
+              . You can order again once it's delivered, or cancel it while it's pending.
+            </p>
+          ) : cart.restaurantId === id && cart.count > 0 ? (
+            <Checkout key={user?.id} restaurantId={id} />
           ) : (
             <p className="muted small">Add items from the menu.</p>
           )}
@@ -85,9 +105,9 @@ export function RestaurantPage() {
 
 function Checkout({ restaurantId }: { restaurantId: number }) {
   const cart = useCart();
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const navigate = useNavigate();
-  const [address, setAddress] = useState("");
+  const [address, setAddress] = useState(user?.address ?? "");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   // One key per checkout: resubmitting (e.g. after a timeout) can't create a second order.
@@ -107,6 +127,7 @@ function Checkout({ restaurantId }: { restaurantId: number }) {
         idempotencyKey,
       );
       cart.clear();
+      refreshUser(); // the address used is now the saved one
       navigate(`/orders/${order.id}`);
     } catch (err) {
       setError((err as Error).message);
@@ -143,6 +164,9 @@ function Checkout({ restaurantId }: { restaurantId: number }) {
           <label>
             Delivery address
             <input value={address} onChange={(e) => setAddress(e.target.value)} required maxLength={255} />
+            <span className="muted small">
+              {user.address ? "Your saved address. Edit it to deliver elsewhere; we'll remember the change." : "We'll save it for your next orders."}
+            </span>
           </label>
           <ErrorNote error={error} />
           <button className="btn" disabled={submitting}>

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { api, FLOW, money, statusLabel, streamOrderStatus, type Order } from "../api";
+import { api, FLOW, isFinal, money, statusLabel, streamOrderStatus, type Order } from "../api";
 import { ErrorNote, StatusBadge } from "../components/Layout";
 import { useRestaurantNames } from "./Restaurants";
 
@@ -24,7 +24,7 @@ export function OrderPage() {
 
   // Live updates: the server pushes each status change; we then refetch for the timestamps.
   // Reconnects if the stream drops while the order is still in progress.
-  const live = !order || !["delivered", "cancelled"].includes(order.status);
+  const live = !order || !isFinal(order.status);
   useEffect(() => {
     refresh();
     if (!live) return;

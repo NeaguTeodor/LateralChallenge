@@ -17,6 +17,7 @@ class UserRead(BaseModel):
     email: EmailStr
     full_name: str
     role: UserRole
+    address: str | None
 
 
 class Token(BaseModel):

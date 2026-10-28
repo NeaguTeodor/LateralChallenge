@@ -69,7 +69,7 @@ All routes are under `/api/v1`. Auth is JWT bearer; get a token from `POST /auth
 | POST   | `/restaurants/{id}/menu`               | admin    | Add menu item                   |
 | PATCH  | `/restaurants/{id}/menu/{item_id}`     | admin    | Update menu item                |
 | DELETE | `/restaurants/{id}/menu/{item_id}`     | admin    | Remove menu item                |
-| POST   | `/orders`                              | user     | Place an order (`Idempotency-Key` optional) |
+| POST   | `/orders`                              | user     | Place an order (`Idempotency-Key` optional; address defaults to the saved one) |
 | GET    | `/orders?status=`                      | user     | Own orders (admins: all)        |
 | GET    | `/orders/{id}`                         | user     | Order with its status history   |
 | GET    | `/orders/{id}/stream`                  | user     | Live status (Server-Sent Events)|
@@ -104,6 +104,11 @@ Invalid transitions return `409 Conflict`. Status updates lock the order row
   behave exactly as in production, and migrations are exercised on every run.
 - **Public endpoints accept an optional token**: anonymous users only see active restaurants,
   admins see inactive ones too (so they can reactivate them).
+- **Ordering rules**: one active (not delivered/cancelled) order per restaurant per customer,
+  and at most `MAX_ORDERS_PER_CUSTOMER` (10) non-cancelled orders. Both are checked while
+  holding a lock on the customer's row, so two simultaneous checkouts can't slip past them.
+- **Saved address**: the last delivery address is stored on the user, pre-fills checkout, and
+  is used when an order omits it; editing it at checkout updates the saved one.
 - **Live tracking uses SSE + Postgres `LISTEN/NOTIFY`** rather than WebSockets or Redis:
   updates are one-way (server → customer), SSE is plain HTTP through nginx, and NOTIFY is
   transactional (sent only on commit) and reaches every uvicorn worker with no extra service.

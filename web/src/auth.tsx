@@ -9,6 +9,7 @@ interface AuthState {
   login: (email: string, password: string) => Promise<void>;
   switchTo: (userId: number) => Promise<void>;
   logout: () => void;
+  refreshUser: () => Promise<void>;
 }
 
 // Remembers an explicit logout, so the demo doesn't log you straight back in.
@@ -69,8 +70,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })().finally(() => setLoading(false));
   }, [clearSession, loadDemoAccounts, switchTo]);
 
+  const refreshUser = useCallback(async () => setUser(await api.me()), []);
+
   return (
-    <AuthContext.Provider value={{ user, loading, demoAccounts, login, switchTo, logout }}>
+    <AuthContext.Provider value={{ user, loading, demoAccounts, login, switchTo, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

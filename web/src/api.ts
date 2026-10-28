@@ -8,6 +8,7 @@ export interface User {
   email: string;
   full_name: string;
   role: Role;
+  address: string | null; // last delivery address, pre-fills checkout
 }
 
 export interface Restaurant {
@@ -137,7 +138,7 @@ export const api = {
 
   // The key makes retries (double clicks, flaky networks) return the same order.
   placeOrder: (
-    data: { restaurant_id: number; delivery_address: string; items: { menu_item_id: number; quantity: number }[] },
+    data: { restaurant_id: number; delivery_address?: string; items: { menu_item_id: number; quantity: number }[] },
     idempotencyKey: string,
   ) => request<Order>("/orders", { ...json("POST", data), headers: { "Idempotency-Key": idempotencyKey } }),
   orders: (status?: OrderStatus) =>
@@ -178,6 +179,7 @@ export const NEXT_STATUS: Partial<Record<OrderStatus, OrderStatus>> = {
   out_for_delivery: "delivered",
 };
 export const CANCELLABLE: OrderStatus[] = ["pending", "accepted"];
+export const isFinal = (s: OrderStatus) => s === "delivered" || s === "cancelled";
 export const FLOW: OrderStatus[] = ["pending", "accepted", "out_for_delivery", "delivered"];
 
 export const statusLabel = (s: OrderStatus) =>
