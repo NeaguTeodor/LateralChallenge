@@ -117,6 +117,9 @@ export const api = {
   register: (data: { email: string; full_name: string; password: string }) =>
     request<User>("/auth/register", json("POST", data)),
   me: () => request<User>("/auth/me"),
+  // Local demo only (404 in production): seeded accounts and passwordless login as one of them.
+  demoAccounts: () => request<User[]>("/auth/demo-accounts"),
+  demoLogin: (role: Role) => request<{ access_token: string }>(`/auth/demo-login/${role}`, { method: "POST" }),
 
   restaurants: () => request<Restaurant[]>("/restaurants"),
   restaurant: (id: number) => request<Restaurant>(`/restaurants/${id}`),
@@ -185,5 +188,7 @@ export const statusLabel = (s: OrderStatus) =>
     delivered: "Delivered",
     cancelled: "Cancelled",
   })[s];
+
+export const roleLabel = (r: Role) => (r === "admin" ? "Admin" : "Customer");
 
 export const money = (v: string | number) => `€${Number(v).toFixed(2)}`;

@@ -6,13 +6,14 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import CurrentUser, SessionDep
+from app.core.config import settings
 from app.core.security import (
     DUMMY_HASH,
     create_access_token,
     hash_password,
     verify_password,
 )
-from app.models import User
+from app.models import User, UserRole
 from app.schemas.user import Token, UserCreate, UserRead
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -52,3 +53,26 @@ def login(form: Annotated[OAuth2PasswordRequestForm, Depends()], db: SessionDep)
 @router.get("/me", response_model=UserRead)
 def read_me(user: CurrentUser) -> User:
     return user
+
+
+# --- Local demo helpers: switch between seeded accounts without typing passwords ---
+
+
+def _demo_users(db: SessionDep) -> dict[UserRole, User]:
+    if not settings.demo_logins_enabled:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
+    emails = [settings.first_admin_email.lower(), settings.demo_customer_email.lower()]
+    return {u.role: u for u in db.scalars(select(User).where(User.email.in_(emails)))}
+
+
+@router.get("/demo-accounts", response_model=list[UserRead])
+def demo_accounts(db: SessionDep) -> list[User]:
+    """Seeded accounts available for one-click login (404 outside the local environment)."""
+    return list(_demo_users(db).values())
+
+
+@router.post("/demo-login/{role}", response_model=Token)
+def demo_login(role: UserRole, db: SessionDep) -> Token:
+    if (user := _demo_users(db).get(role)) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No demo account for this role")
+    return Token(access_token=create_access_token(user.id))

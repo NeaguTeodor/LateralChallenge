@@ -94,7 +94,8 @@ label.inline { display: flex; align-items: center; gap: 0.4rem; font-weight: 400
 @media (max-width: 640px) { .order-row { grid-template-columns: 1fr auto; } }
 
 .badge { display: inline-block; font-size: 0.75rem; font-weight: 600; border-radius: 999px; padding: 0.15rem 0.6rem; background: #eee; color: var(--muted); vertical-align: middle; text-align: center; }
-.badge-admin { margin-left: 0.4rem; background: #1d1d1f; color: #fff; }
+.role-admin { background: #1d1d1f; color: #fff; }
+.role-customer { background: #fff0e6; color: var(--accent); }
 .status-pending { background: #fff3bf; color: #8a6100; }
 .status-accepted { background: #d0ebff; color: #1864ab; }
 .status-out_for_delivery { background: #e5dbff; color: #5f3dc4; }
@@ -131,3 +132,4 @@ tr:last-child td { border-bottom: none; }
 .item-form input[type="number"] { flex: 0 1 100px; }
 .toolbar { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
 .tracker small { display: block; font-weight: 400; color: var(--muted); }
+.switcher { font: inherit; font-size: 0.875rem; padding: 0.35rem 0.5rem; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); cursor: pointer; }

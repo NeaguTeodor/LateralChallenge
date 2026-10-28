@@ -1,4 +1,6 @@
-from tests.conftest import API
+from app.core.config import settings
+from app.models import UserRole
+from tests.conftest import API, _make_user
 
 
 def test_register_login_and_me(client):
@@ -41,3 +43,23 @@ def test_password_limit_is_in_bytes(client):
     # 72 characters but 144 bytes: bcrypt would reject it, so validation must catch it first.
     payload = {"email": "multi@test.dev", "full_name": "M", "password": "é" * 72}
     assert client.post(f"{API}/auth/register", json=payload).status_code == 422
+
+
+def test_demo_login_switches_between_seeded_accounts(client, db):
+    _make_user(db, settings.first_admin_email, UserRole.ADMIN)
+    _make_user(db, settings.demo_customer_email, UserRole.CUSTOMER)
+    assert {u["role"] for u in client.get(f"{API}/auth/demo-accounts").json()} == {
+        "admin",
+        "customer",
+    }
+    for role in ("admin", "customer"):
+        token = client.post(f"{API}/auth/demo-login/{role}").json()["access_token"]
+        me = client.get(f"{API}/auth/me", headers={"Authorization": f"Bearer {token}"})
+        assert me.json()["role"] == role
+
+
+def test_demo_login_disabled_in_production(client, db, monkeypatch):
+    _make_user(db, settings.first_admin_email, UserRole.ADMIN)
+    monkeypatch.setattr(settings, "environment", "production")
+    assert client.get(f"{API}/auth/demo-accounts").status_code == 404
+    assert client.post(f"{API}/auth/demo-login/admin").status_code == 404

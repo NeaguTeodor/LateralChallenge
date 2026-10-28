@@ -19,11 +19,16 @@ track their status; staff (admins) manage menus and move orders through their li
 docker compose up --build        # no .env needed; migrations + demo data run on start
 ```
 
-1. Open **http://localhost:8080**, sign up as a customer, add a few items and place an order.
-2. In a private window, log in as staff (`admin@takeaway.dev` / `admin1234`) → **Manage orders**.
+1. Open **http://localhost:8080**: you're signed in as the demo **Customer** (badge, top right).
+   Add a few items and place an order.
+2. Open a **private window** (it has its own session), choose **Switch to… → Admin**, then
+   **Manage orders**.
 3. Advance the order. The customer's tracking page updates **instantly** (Server-Sent Events),
    with a timestamp per step.
 4. API docs with "Authorize": **http://localhost:8080/api/docs**.
+
+Seeded accounts: `customer@takeaway.dev` / `customer1234` and `admin@takeaway.dev` /
+`admin1234`. Sign up to create more customers.
 
 Tests (needs the compose `db` running; uses a separate `takeaway_test` database):
 
@@ -44,7 +49,7 @@ flowchart LR
 ```
 
 On start the API container runs Alembic migrations and an idempotent seed (admin user +
-two demo restaurants), then reports healthy; nginx waits for that.
+a demo customer + two demo restaurants), then reports healthy; nginx waits for that.
 
 ## API overview
 
@@ -104,6 +109,10 @@ Invalid transitions return `409 Conflict`. Status updates lock the order row
   transactional (sent only on commit) and reaches every uvicorn worker with no extra service.
 - **Idempotent order placement**: an optional `Idempotency-Key` header (unique per customer)
   makes retries and double clicks return the original order; the web UI sends one per checkout.
+- **Demo account switcher** (local only): the app starts signed in as a seeded customer and a
+  header dropdown switches to the seeded admin without typing passwords. It's backed by
+  `POST /auth/demo-login/{role}`, which returns 404 when `ENVIRONMENT=production`; sign-up and
+  normal login work as usual.
 - **Hardening kept deliberately small**: login/register are rate-limited in nginx, Postgres is
   bound to localhost, the health check hits the DB, and `ENVIRONMENT=production` refuses to
   start with the default JWT secret or admin password.

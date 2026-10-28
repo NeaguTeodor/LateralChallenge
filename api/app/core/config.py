@@ -6,6 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 INSECURE_DEFAULTS = {
     "jwt_secret_key": "insecure-dev-secret-change-me-in-production",
     "first_admin_password": "admin1234",
+    "demo_customer_password": "customer1234",
 }
 
 
@@ -24,7 +25,14 @@ class Settings(BaseSettings):
 
     first_admin_email: str = "admin@takeaway.dev"
     first_admin_password: str = INSECURE_DEFAULTS["first_admin_password"]
-    seed_demo_data: bool = True
+    seed_demo_data: bool = True  # demo restaurants + a demo customer
+    demo_customer_email: str = "customer@takeaway.dev"
+    demo_customer_password: str = INSECURE_DEFAULTS["demo_customer_password"]
+
+    @property
+    def demo_logins_enabled(self) -> bool:
+        """One-click login as the seeded accounts, for local demos only."""
+        return self.environment == "local"
 
     @model_validator(mode="after")
     def _no_insecure_defaults_in_production(self) -> "Settings":

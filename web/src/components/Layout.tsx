@@ -1,11 +1,10 @@
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth";
 import { useCart } from "../cart";
-import type { OrderStatus } from "../api";
-import { statusLabel } from "../api";
+import { roleLabel, statusLabel, type OrderStatus, type Role } from "../api";
 
 export function Layout() {
-  const { user, logout } = useAuth();
+  const { user, logout, demoAccounts, switchTo } = useAuth();
   const { count, restaurantId } = useCart();
   const navigate = useNavigate();
 
@@ -34,12 +33,33 @@ export function Layout() {
                 Cart · {count}
               </Link>
             )}
+            {user && (
+              <span className="small">
+                <span className={`badge role-${user.role}`}>{roleLabel(user.role)}</span> {user.full_name}
+              </span>
+            )}
+            {demoAccounts.length > 0 && (
+              <select
+                className="switcher"
+                aria-label="Switch demo account"
+                value=""
+                onChange={(e) => {
+                  const role = e.target.value as Role;
+                  switchTo(role).then(() => navigate(role === "admin" ? "/admin/orders" : "/"));
+                }}
+              >
+                <option value="" disabled>
+                  Switch to…
+                </option>
+                {demoAccounts.map((a) => (
+                  <option key={a.id} value={a.role} disabled={a.id === user?.id} title={a.email}>
+                    {roleLabel(a.role)}
+                  </option>
+                ))}
+              </select>
+            )}
             {user ? (
               <>
-                <span className="muted small">
-                  {user.full_name}
-                  {user.role === "admin" && <span className="badge badge-admin">admin</span>}
-                </span>
                 <button
                   className="btn btn-ghost"
                   onClick={() => {

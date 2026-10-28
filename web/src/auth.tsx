@@ -1,43 +1,68 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
-import { api, setUnauthorizedHandler, tokenStore, type User } from "./api";
+import { api, setUnauthorizedHandler, tokenStore, type Role, type User } from "./api";
 
 interface AuthState {
   user: User | null;
   loading: boolean;
+  demoAccounts: User[];
   login: (email: string, password: string) => Promise<void>;
+  switchTo: (role: Role) => Promise<void>;
   logout: () => void;
 }
+
+// Remembers an explicit logout, so the demo doesn't log you straight back in.
+const LOGGED_OUT_KEY = "takeaway.loggedOut";
 
 const AuthContext = createContext<AuthState | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(Boolean(tokenStore.get()));
+  const [loading, setLoading] = useState(true);
+  const [demoAccounts, setDemoAccounts] = useState<User[]>([]);
 
-  const logout = useCallback(() => {
+  const clearSession = useCallback(() => {
     tokenStore.clear();
     setUser(null);
   }, []);
 
-  useEffect(() => {
-    setUnauthorizedHandler(logout);
-    if (!tokenStore.get()) return;
-    api
-      .me()
-      .then(setUser)
-      .catch(logout)
-      .finally(() => setLoading(false));
-  }, [logout]);
-
-  const login = useCallback(async (email: string, password: string) => {
-    const { access_token } = await api.login(email, password);
-    tokenStore.set(access_token);
+  const startSession = useCallback(async (token: string) => {
+    tokenStore.set(token);
+    localStorage.removeItem(LOGGED_OUT_KEY);
     setUser(await api.me());
   }, []);
 
+  const login = useCallback(
+    async (email: string, password: string) => startSession((await api.login(email, password)).access_token),
+    [startSession],
+  );
+  const switchTo = useCallback(
+    async (role: Role) => startSession((await api.demoLogin(role)).access_token),
+    [startSession],
+  );
+  const logout = useCallback(() => {
+    clearSession();
+    localStorage.setItem(LOGGED_OUT_KEY, "1");
+  }, [clearSession]);
+
+  // Restore the session; in local demo mode, start as the demo customer.
+  useEffect(() => {
+    setUnauthorizedHandler(clearSession);
+    (async () => {
+      const accounts = await api.demoAccounts().catch(() => []);
+      setDemoAccounts(accounts);
+      const me = tokenStore.get() ? await api.me().catch(() => null) : null;
+      if (me) setUser(me);
+      else if (accounts.some((a) => a.role === "customer") && !localStorage.getItem(LOGGED_OUT_KEY))
+        await switchTo("customer");
+      else clearSession();
+    })().finally(() => setLoading(false));
+  }, [clearSession, switchTo]);
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>{children}</AuthContext.Provider>
+    <AuthContext.Provider value={{ user, loading, demoAccounts, login, switchTo, logout }}>
+      {children}
+    </AuthContext.Provider>
   );
 }
 

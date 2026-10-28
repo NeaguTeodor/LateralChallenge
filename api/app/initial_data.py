@@ -27,19 +27,14 @@ DEMO_RESTAURANTS = {
 }
 
 
-def seed_admin(db: Session) -> None:
-    email = settings.first_admin_email.lower()  # login lowercases too
+def seed_user(db: Session, email: str, password: str, full_name: str, role: UserRole) -> None:
+    email = email.lower()  # login lowercases too
     if db.scalar(select(User).where(User.email == email)):
         return
     db.add(
-        User(
-            email=email,
-            full_name="Admin",
-            hashed_password=hash_password(settings.first_admin_password),
-            role=UserRole.ADMIN,
-        )
+        User(email=email, full_name=full_name, hashed_password=hash_password(password), role=role)
     )
-    logger.info("Created admin user %s", email)
+    logger.info("Created %s user %s", role, email)
 
 
 def seed_demo_restaurants(db: Session) -> None:
@@ -60,8 +55,17 @@ def seed_demo_restaurants(db: Session) -> None:
 def main() -> None:
     logging.basicConfig(level=logging.INFO)
     with SessionLocal() as db:
-        seed_admin(db)
+        seed_user(
+            db, settings.first_admin_email, settings.first_admin_password, "Admin", UserRole.ADMIN
+        )
         if settings.seed_demo_data:
+            seed_user(
+                db,
+                settings.demo_customer_email,
+                settings.demo_customer_password,
+                "Demo Customer",
+                UserRole.CUSTOMER,
+            )
             seed_demo_restaurants(db)
         db.commit()
 
