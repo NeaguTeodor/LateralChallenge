@@ -25,6 +25,8 @@ class TimestampMixin:
     )
 
 
-def str_enum(enum_cls: type[StrEnum], name: str) -> Enum:
+def str_enum(enum_cls: type[StrEnum], name: str, **kwargs: bool) -> Enum:
     """DB enum that stores the member values (e.g. 'admin') rather than names ('ADMIN')."""
-    return Enum(enum_cls, name=name, values_callable=lambda members: [m.value for m in members])
+    return Enum(
+        enum_cls, name=name, values_callable=lambda members: [m.value for m in members], **kwargs
+    )

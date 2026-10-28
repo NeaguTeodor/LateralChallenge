@@ -1,7 +1,8 @@
+from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
 
-from sqlalchemy import ForeignKey, Numeric, String
+from sqlalchemy import DateTime, ForeignKey, Numeric, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, str_enum
@@ -17,6 +18,8 @@ class OrderStatus(StrEnum):
 
 class Order(TimestampMixin, Base):
     __tablename__ = "orders"
+    # A retried POST with the same Idempotency-Key returns the original order.
+    __table_args__ = (UniqueConstraint("customer_id", "idempotency_key"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     customer_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
@@ -26,10 +29,19 @@ class Order(TimestampMixin, Base):
     )
     delivery_address: Mapped[str] = mapped_column(String(255))
     total: Mapped[Decimal] = mapped_column(Numeric(10, 2))
+    idempotency_key: Mapped[str | None] = mapped_column(String(64))
 
     items: Mapped[list["OrderItem"]] = relationship(
         back_populates="order", cascade="all, delete-orphan", lazy="selectin"
     )
+    events: Mapped[list["OrderStatusEvent"]] = relationship(
+        cascade="all, delete-orphan", lazy="selectin", order_by="OrderStatusEvent.id"
+    )
+
+    def set_status(self, status: OrderStatus) -> None:
+        """Change status and record it, so tracking can show when each step happened."""
+        self.status = status
+        self.events.append(OrderStatusEvent(status=status))
 
 
 class OrderItem(Base):
@@ -50,3 +62,16 @@ class OrderItem(Base):
     quantity: Mapped[int]
 
     order: Mapped[Order] = relationship(back_populates="items")
+
+
+class OrderStatusEvent(Base):
+    """Append-only history of an order's status changes."""
+
+    __tablename__ = "order_status_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    order_id: Mapped[int] = mapped_column(ForeignKey("orders.id", ondelete="CASCADE"), index=True)
+    status: Mapped[OrderStatus] = mapped_column(
+        str_enum(OrderStatus, "order_status", create_type=False)
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

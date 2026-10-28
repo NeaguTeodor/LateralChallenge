@@ -27,6 +27,13 @@ class OrderItemRead(BaseModel):
     quantity: int
 
 
+class OrderStatusEventRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    status: OrderStatus
+    created_at: datetime
+
+
 class OrderRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -37,6 +44,7 @@ class OrderRead(BaseModel):
     delivery_address: str
     total: Decimal
     items: list[OrderItemRead]
+    events: list[OrderStatusEventRead]
     created_at: datetime
     updated_at: datetime
 

@@ -168,3 +168,41 @@ def test_inactive_restaurant_does_not_take_orders(client, db, customer_headers, 
         headers=customer_headers,
     )
     assert res.status_code == 404
+
+
+def test_idempotency_key_returns_the_same_order(client, customer_headers, restaurant):
+    body = {
+        "restaurant_id": restaurant.id,
+        "delivery_address": "x",
+        "items": [{"menu_item_id": restaurant.menu_items[0].id, "quantity": 1}],
+    }
+    headers = {**customer_headers, "Idempotency-Key": "checkout-1"}
+    first = client.post(f"{API}/orders", json=body, headers=headers).json()
+    retry = client.post(f"{API}/orders", json=body, headers=headers).json()
+    assert retry["id"] == first["id"]
+    assert len(client.get(f"{API}/orders", headers=customer_headers).json()) == 1
+
+
+def test_status_history_is_recorded(client, order, admin_headers):
+    res = client.patch(
+        f"{API}/orders/{order['id']}/status", json={"status": "accepted"}, headers=admin_headers
+    )
+    assert [e["status"] for e in res.json()["events"]] == ["pending", "accepted"]
+
+
+def test_status_stream_pushes_changes(client, order, customer_headers):
+    def read_stream():
+        url = f"{API}/orders/{order['id']}/stream"
+        with client.stream("GET", url, headers=customer_headers) as res:
+            return [line[6:] for line in res.iter_lines() if line.startswith("data: ")]
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        events = pool.submit(read_stream)
+        time.sleep(0.5)  # let the stream start listening
+        client.post(f"{API}/orders/{order['id']}/cancel", headers=customer_headers)
+        assert events.result(timeout=10) == ["pending", "cancelled"]
+
+
+def test_cannot_stream_someone_elses_order(client, order, other_customer_headers):
+    res = client.get(f"{API}/orders/{order['id']}/stream", headers=other_customer_headers)
+    assert res.status_code == 404

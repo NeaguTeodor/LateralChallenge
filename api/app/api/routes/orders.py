@@ -1,7 +1,8 @@
 from collections.abc import Sequence
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Header, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 
 from app.api.deps import AdminUser, CurrentUser, SessionDep
@@ -21,8 +22,14 @@ def get_order_for_user(db: SessionDep, user: User, order_id: int, *, lock: bool 
 
 
 @router.post("", response_model=OrderRead, status_code=status.HTTP_201_CREATED)
-def place_order(payload: OrderCreate, db: SessionDep, user: CurrentUser) -> Order:
-    return order_service.place_order(db, user, payload)
+def place_order(
+    payload: OrderCreate,
+    db: SessionDep,
+    user: CurrentUser,
+    idempotency_key: Annotated[str | None, Header(max_length=64)] = None,
+) -> Order:
+    """Send an `Idempotency-Key` header to make retries safe: a repeat returns the same order."""
+    return order_service.place_order(db, user, payload, idempotency_key)
 
 
 @router.get("", response_model=list[OrderRead])
@@ -45,6 +52,17 @@ def list_orders(
 @router.get("/{order_id}", response_model=OrderRead)
 def get_order(order_id: int, db: SessionDep, user: CurrentUser) -> Order:
     return get_order_for_user(db, user, order_id)
+
+
+@router.get("/{order_id}/stream", response_class=StreamingResponse)
+def stream_order_status(order_id: int, db: SessionDep, user: CurrentUser) -> StreamingResponse:
+    """Live tracking via Server-Sent Events (`data: <status>` per change)."""
+    get_order_for_user(db, user, order_id)  # authorization only
+    return StreamingResponse(
+        order_service.status_stream(order_id),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},  # no nginx buffering
+    )
 
 
 @router.patch("/{order_id}/status", response_model=OrderRead)
