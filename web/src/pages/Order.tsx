@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { api, FLOW, money, statusLabel, type Order } from "../api";
+import { api, FLOW, money, statusLabel, streamOrderStatus, type Order } from "../api";
 import { ErrorNote, StatusBadge } from "../components/Layout";
 import { useRestaurantNames } from "./Restaurants";
 
-const POLL_MS = 5000;
+const RECONNECT_MS = 3000;
 
 export function OrderPage() {
   const id = Number(useParams().id);
@@ -22,14 +22,20 @@ export function OrderPage() {
     );
   }, [id]);
 
-  // Poll while the order is still moving so staff updates show up live.
+  // Live updates: the server pushes each status change; we then refetch for the timestamps.
+  // Reconnects if the stream drops while the order is still in progress.
   const live = !order || !["delivered", "cancelled"].includes(order.status);
   useEffect(() => {
     refresh();
     if (!live) return;
-    const timer = setInterval(refresh, POLL_MS);
-    return () => clearInterval(timer);
-  }, [refresh, live]);
+    const abort = new AbortController();
+    const connect = () =>
+      streamOrderStatus(id, refresh, abort.signal)
+        .catch(() => {})
+        .finally(() => !abort.signal.aborted && setTimeout(connect, RECONNECT_MS));
+    connect();
+    return () => abort.abort();
+  }, [id, refresh, live]);
 
   async function cancel() {
     try {
@@ -61,14 +67,18 @@ export function OrderPage() {
         <p className="note">This order was cancelled.</p>
       ) : (
         <ol className="tracker">
-          {FLOW.map((s, i) => (
-            <li key={s} className={i < step ? "done" : i === step ? "current" : ""}>
-              {statusLabel(s)}
-            </li>
-          ))}
+          {FLOW.map((s, i) => {
+            const at = order.events.find((e) => e.status === s)?.created_at;
+            return (
+              <li key={s} className={i < step ? "done" : i === step ? "current" : ""}>
+                {statusLabel(s)}
+                {at && <small>{new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</small>}
+              </li>
+            );
+          })}
         </ol>
       )}
-      {live && <p className="muted small">This page updates automatically.</p>}
+      {live && <p className="muted small">Live: updates appear as soon as the restaurant changes the status.</p>}
 
       <div className="card">
         <ul className="cart-lines">

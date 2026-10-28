@@ -13,7 +13,7 @@ at `/` and API calls go to `/api/v1` on the same origin.
 | `/restaurants/:id`   | public   | Menu + cart; checkout needs an account            |
 | `/login`, `/register`| public   | Auth (JWT kept in `localStorage`)                 |
 | `/orders`            | user     | Own orders                                        |
-| `/orders/:id`        | user     | Live tracking (polls every 5 s), cancel if pending |
+| `/orders/:id`        | user     | Live tracking (SSE), step times, cancel if pending |
 | `/admin/orders`      | admin    | All orders, filter by status, advance / cancel    |
 | `/admin/menus`       | admin    | Add restaurants; add / edit / delete menu items   |
 

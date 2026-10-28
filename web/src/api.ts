@@ -42,6 +42,7 @@ export interface Order {
   delivery_address: string;
   total: string;
   items: OrderItem[];
+  events: { status: OrderStatus; created_at: string }[];
   created_at: string;
   updated_at: string;
 }
@@ -131,11 +132,11 @@ export const api = {
   deleteMenuItem: (restaurantId: number, itemId: number) =>
     request<void>(`/restaurants/${restaurantId}/menu/${itemId}`, { method: "DELETE" }),
 
-  placeOrder: (data: {
-    restaurant_id: number;
-    delivery_address: string;
-    items: { menu_item_id: number; quantity: number }[];
-  }) => request<Order>("/orders", json("POST", data)),
+  // The key makes retries (double clicks, flaky networks) return the same order.
+  placeOrder: (
+    data: { restaurant_id: number; delivery_address: string; items: { menu_item_id: number; quantity: number }[] },
+    idempotencyKey: string,
+  ) => request<Order>("/orders", { ...json("POST", data), headers: { "Idempotency-Key": idempotencyKey } }),
   orders: (status?: OrderStatus) =>
     request<Order[]>(`/orders?limit=100${status ? `&status=${status}` : ""}`),
   order: (id: number) => request<Order>(`/orders/${id}`),
@@ -143,6 +144,29 @@ export const api = {
   setOrderStatus: (id: number, status: OrderStatus) =>
     request<Order>(`/orders/${id}/status`, json("PATCH", { status })),
 };
+
+// Server-Sent Events over fetch (EventSource can't send the Authorization header).
+// Calls onStatus for every `data:` line until the server closes the stream or signal aborts.
+export async function streamOrderStatus(id: number, onStatus: (s: OrderStatus) => void, signal: AbortSignal) {
+  const res = await fetch(`${BASE}/orders/${id}/stream`, {
+    headers: { Authorization: `Bearer ${tokenStore.get()}` },
+    signal,
+  });
+  if (!res.ok || !res.body) throw new ApiError(res.status, res.statusText);
+  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) return;
+    buffer += value;
+    const events = buffer.split("\n\n");
+    buffer = events.pop()!;
+    for (const event of events) {
+      const data = event.match(/^data: (.*)$/m)?.[1];
+      if (data) onStatus(data as OrderStatus);
+    }
+  }
+}
 
 // Mirrors the backend's allowed transitions.
 export const NEXT_STATUS: Partial<Record<OrderStatus, OrderStatus>> = {

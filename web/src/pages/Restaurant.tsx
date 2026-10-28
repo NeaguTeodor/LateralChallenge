@@ -90,17 +90,22 @@ function Checkout({ restaurantId }: { restaurantId: number }) {
   const [address, setAddress] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // One key per checkout: resubmitting (e.g. after a timeout) can't create a second order.
+  const [idempotencyKey] = useState(() => `${Date.now()}-${Math.random().toString(36).slice(2)}`);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setSubmitting(true);
     try {
-      const order = await api.placeOrder({
-        restaurant_id: restaurantId,
-        delivery_address: address,
-        items: cart.lines.map((l) => ({ menu_item_id: l.item.id, quantity: l.quantity })),
-      });
+      const order = await api.placeOrder(
+        {
+          restaurant_id: restaurantId,
+          delivery_address: address,
+          items: cart.lines.map((l) => ({ menu_item_id: l.item.id, quantity: l.quantity })),
+        },
+        idempotencyKey,
+      );
       cart.clear();
       navigate(`/orders/${order.id}`);
     } catch (err) {

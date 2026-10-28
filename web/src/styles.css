@@ -124,8 +124,10 @@ table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 0.7rem 0.9rem; border-bottom: 1px solid var(--border); vertical-align: top; }
 th { font-size: 0.8rem; text-transform: uppercase; color: var(--muted); letter-spacing: 0.03em; }
 tr:last-child td { border-bottom: none; }
-.row-actions { white-space: nowrap; display: flex; gap: 0.4rem; }
+.row-actions { white-space: nowrap; }
+.row-actions .btn + .btn { margin-left: 0.4rem; }
 .item-form { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; width: 100%; margin-bottom: 0.75rem; }
 .item-form input { width: auto; flex: 1 1 140px; margin: 0; }
 .item-form input[type="number"] { flex: 0 1 100px; }
 .toolbar { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
+.tracker small { display: block; font-weight: 400; color: var(--muted); }
