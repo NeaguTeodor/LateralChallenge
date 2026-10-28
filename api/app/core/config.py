@@ -1,0 +1,37 @@
+from typing import Literal
+
+from pydantic import model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+INSECURE_DEFAULTS = {
+    "jwt_secret_key": "insecure-dev-secret-change-me-in-production",
+    "first_admin_password": "admin1234",
+}
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    environment: Literal["local", "production"] = "local"
+    project_name: str = "Takeaway API"
+    api_v1_prefix: str = "/api/v1"
+
+    database_url: str = "postgresql+psycopg://takeaway:takeaway@localhost:5432/takeaway"
+
+    jwt_secret_key: str = INSECURE_DEFAULTS["jwt_secret_key"]
+    jwt_algorithm: str = "HS256"
+    access_token_expire_minutes: int = 60
+
+    first_admin_email: str = "admin@takeaway.dev"
+    first_admin_password: str = INSECURE_DEFAULTS["first_admin_password"]
+    seed_demo_data: bool = True
+
+    @model_validator(mode="after")
+    def _no_insecure_defaults_in_production(self) -> "Settings":
+        insecure = [k for k, v in INSECURE_DEFAULTS.items() if getattr(self, k) == v]
+        if self.environment == "production" and insecure:
+            raise ValueError(f"Set secure values for {insecure} in production")
+        return self
+
+
+settings = Settings()
