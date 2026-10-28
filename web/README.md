@@ -10,12 +10,15 @@ at `/` and API calls go to `/api/v1` on the same origin.
 | Path                 | Who      | What                                              |
 |----------------------|----------|---------------------------------------------------|
 | `/`                  | public   | Restaurant list                                   |
-| `/restaurants/:id`   | public   | Menu + cart; checkout needs an account            |
+| `/restaurants/:id`   | public   | Menu + cart (max 10 per item); checkout needs a customer account |
 | `/login`, `/register`| public   | Auth (JWT kept in `localStorage`)                 |
-| `/orders`            | user     | Own orders                                        |
+| `/orders`            | customer | Own orders                                        |
 | `/orders/:id`        | user     | Live tracking (SSE), step times, cancel if pending |
 | `/admin/orders`      | admin    | All orders, filter by status, advance / cancel    |
-| `/admin/menus`       | admin    | Add restaurants; add / edit / delete menu items   |
+| `/admin/menus`       | admin    | Add, deactivate, reactivate restaurants; add / edit / delete menu items |
+
+The header shows the signed-in role and, when the API has `DEMO_LOGINS` on, a **Switch to…**
+dropdown with every account. Pages remount on account switch so they refetch their data.
 
 ## Local development
 
