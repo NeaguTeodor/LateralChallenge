@@ -54,3 +54,12 @@ def require_admin(user: CurrentUser) -> User:
 
 
 AdminUser = Annotated[User, Depends(require_admin)]
+
+
+def require_customer(user: CurrentUser) -> User:
+    if user.is_admin:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Staff accounts can't place orders")
+    return user
+
+
+CustomerUser = Annotated[User, Depends(require_customer)]

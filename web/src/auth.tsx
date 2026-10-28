@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
-import { api, setUnauthorizedHandler, tokenStore, type User } from "./api";
+import { api, setUnauthorizedHandler, tokenStore, type Role, type User } from "./api";
 
 interface AuthState {
   user: User | null;
@@ -85,11 +85,12 @@ export function useAuth() {
   return ctx;
 }
 
-export function RequireAuth({ admin, children }: { admin?: boolean; children: ReactNode }) {
+// `role` limits a page to one kind of account; the other kind is sent to its own home page.
+export function RequireAuth({ role, children }: { role?: Role; children: ReactNode }) {
   const { user, loading } = useAuth();
   const location = useLocation();
   if (loading) return <p className="muted">Loading…</p>;
   if (!user) return <Navigate to="/login" state={{ from: location.pathname }} replace />;
-  if (admin && user.role !== "admin") return <Navigate to="/" replace />;
+  if (role && user.role !== role) return <Navigate to={user.role === "admin" ? "/admin/orders" : "/"} replace />;
   return <>{children}</>;
 }

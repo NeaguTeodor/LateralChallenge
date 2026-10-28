@@ -5,7 +5,7 @@ from fastapi import APIRouter, Header, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 
-from app.api.deps import AdminUser, CurrentUser, SessionDep
+from app.api.deps import AdminUser, CurrentUser, CustomerUser, SessionDep
 from app.models import Order, OrderStatus, User
 from app.schemas.order import OrderCreate, OrderRead, OrderStatusUpdate
 from app.services import orders as order_service
@@ -25,7 +25,7 @@ def get_order_for_user(db: SessionDep, user: User, order_id: int, *, lock: bool 
 def place_order(
     payload: OrderCreate,
     db: SessionDep,
-    user: CurrentUser,
+    user: CustomerUser,
     idempotency_key: Annotated[str | None, Header(max_length=64)] = None,
 ) -> Order:
     """Send an `Idempotency-Key` header to make retries safe: a repeat returns the same order."""

@@ -19,7 +19,7 @@ export function Layout() {
             <NavLink to="/" end>
               Restaurants
             </NavLink>
-            {user && <NavLink to="/orders">My orders</NavLink>}
+            {user?.role === "customer" && <NavLink to="/orders">My orders</NavLink>}
             {user?.role === "admin" && (
               <>
                 <NavLink to="/admin/orders">Manage orders</NavLink>

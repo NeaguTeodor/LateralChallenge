@@ -13,16 +13,17 @@ export function RestaurantPage() {
   const [activeOrder, setActiveOrder] = useState<Order | null>(null);
   const cart = useCart();
   const { user } = useAuth();
+  const isStaff = user?.role === "admin"; // staff browse menus but don't order
 
   // Only one active order per restaurant: surface it before the customer builds a cart.
   // (Checkout below is keyed on the user so it remounts with their saved address.)
   useEffect(() => {
-    if (!user) return setActiveOrder(null);
+    if (!user || isStaff) return setActiveOrder(null);
     api
       .orders()
       .then((orders) => setActiveOrder(orders.find((o) => o.restaurant_id === id && !isFinal(o.status)) ?? null))
       .catch(() => {});
-  }, [id, user]);
+  }, [id, user, isStaff]);
 
   const { syncWithMenu } = cart;
   useEffect(() => {
@@ -70,7 +71,10 @@ export function RestaurantPage() {
                 </div>
                 <div className="menu-actions">
                   <span className="price">{money(item.price)}</span>
-                  {item.is_available ? (
+                  {!item.is_available ? (
+                    <span className="muted small">Unavailable</span>
+                  ) : (
+                    !isStaff && (
                     <button
                       className="btn btn-small"
                       onClick={() => cart.add(item)}
@@ -78,8 +82,7 @@ export function RestaurantPage() {
                     >
                       Add
                     </button>
-                  ) : (
-                    <span className="muted small">Unavailable</span>
+                    )
                   )}
                 </div>
               </li>
@@ -94,7 +97,11 @@ export function RestaurantPage() {
 
         <aside className="card cart">
           <h2>Your order</h2>
-          {activeOrder ? (
+          {isStaff ? (
+            <p className="muted small">
+              Staff accounts can't place orders. <Link to="/admin/menus">Manage this menu</Link> instead.
+            </p>
+          ) : activeOrder ? (
             <p className="note small">
               You already have an active order here:{" "}
               <Link to={`/orders/${activeOrder.id}`}>

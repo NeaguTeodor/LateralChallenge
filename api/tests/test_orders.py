@@ -305,3 +305,8 @@ def test_deactivating_restaurant_cancels_unsent_orders(client, db, admin_headers
 def _customer(client, db, email):
     _make_user(db, email, UserRole.CUSTOMER)
     return _auth_headers(client, email)
+
+
+def test_staff_cannot_place_orders(client, admin_headers, restaurant):
+    res = _place(client, admin_headers, restaurant, delivery_address="x")
+    assert res.status_code == 403

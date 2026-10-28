@@ -24,10 +24,10 @@ createRoot(document.getElementById("root")!).render(
               <Route path="restaurants/:id" element={<RestaurantPage />} />
               <Route path="login" element={<LoginPage />} />
               <Route path="register" element={<RegisterPage />} />
-              <Route path="orders" element={<RequireAuth><OrdersPage /></RequireAuth>} />
+              <Route path="orders" element={<RequireAuth role="customer"><OrdersPage /></RequireAuth>} />
               <Route path="orders/:id" element={<RequireAuth><OrderPage /></RequireAuth>} />
-              <Route path="admin/orders" element={<RequireAuth admin><AdminOrdersPage /></RequireAuth>} />
-              <Route path="admin/menus" element={<RequireAuth admin><AdminMenusPage /></RequireAuth>} />
+              <Route path="admin/orders" element={<RequireAuth role="admin"><AdminOrdersPage /></RequireAuth>} />
+              <Route path="admin/menus" element={<RequireAuth role="admin"><AdminMenusPage /></RequireAuth>} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
           </Routes>
